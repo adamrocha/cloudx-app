@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ssp-namespace
+  labels:
+    name: ssp-namespace
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: bidder-app
+  labels:
+    name: bidder-app
