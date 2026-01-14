@@ -1,0 +1,61 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ssp
+  namespace: ssp-namespace
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ssp
+  template:
+    metadata:
+      labels:
+        app: ssp
+        network-policy: ssp-network-policy
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10000
+        fsGroup: 20000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: ssp
+          image: 921150455604.dkr.ecr.us-east-1.amazonaws.com/cloudx-app-repo:latest
+          imagePullPolicy: Always
+          args:
+            - "./server"
+            - "ssp"
+            - "8091"
+            - "http://bidder.bidder-app.svc.cluster.local:8092/bid"
+          ports:
+            - containerPort: 8091
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8091
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8091
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 10000
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            limits:
+              memory: "256Mi"
+              cpu: "500m"
+            requests:
+              memory: "128Mi"
+              cpu: "250m"

@@ -1,0 +1,32 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: bidder-network-policy
+  namespace: bidder-app
+spec:
+  podSelector:
+    matchLabels:
+      app: bidder
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Only allow traffic from SSP service
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ssp-namespace
+      podSelector:
+        matchLabels:
+          app: ssp
+    ports:
+    - protocol: TCP
+      port: 8092
+  egress:
+  # Allow DNS resolution
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 53
+    - protocol: UDP
+      port: 53
