@@ -1,9 +1,17 @@
 # Wait for EKS cluster to be ready
 resource "null_resource" "wait_for_cluster" {
-  depends_on = [aws_eks_node_group.node_group]
+  depends_on = [
+    aws_eks_node_group.node_group,
+    aws_route_table_association.public
+  ]
 
   provisioner "local-exec" {
     command = "aws eks wait cluster-active --name ${aws_eks_cluster.eks.name} --region ${var.region}"
+  }
+
+  # Add a small delay to ensure cluster is fully ready
+  provisioner "local-exec" {
+    command = "sleep 30"
   }
 }
 
@@ -57,7 +65,10 @@ resource "null_resource" "update_deployments" {
 
 # Deploy Kubernetes manifests
 resource "null_resource" "deploy_app" {
-  depends_on = [null_resource.update_deployments]
+  depends_on = [
+    null_resource.update_deployments,
+    aws_eks_node_group.node_group
+  ]
 
   provisioner "local-exec" {
     command = <<-EOT
@@ -71,6 +82,17 @@ resource "null_resource" "deploy_app" {
       kubectl apply -f ../k8s/bidder-network-policy.yaml
     EOT
   }
+
+  # Add destroy-time cleanup
+  # provisioner "local-exec" {
+  #   when    = destroy
+  #   command = <<-EOT
+  #     kubectl delete networkpolicy --all --all-namespaces --ignore-not-found=true
+  #     kubectl delete service --all --all-namespaces --ignore-not-found=true
+  #     kubectl delete deployment --all --all-namespaces --ignore-not-found=true
+  #     kubectl delete namespace ssp-namespace bidder-app --ignore-not-found=true
+  #   EOT
+  # }
 
   triggers = {
     deployments_updated = null_resource.update_deployments.id
