@@ -41,6 +41,39 @@ kubectl get service ssp -n ssp-namespace -o jsonpath='{.status.loadBalancer.ingr
 
 ---
 
+## Environment Variables & Security
+
+For enhanced security, the deployment uses environment variable substitution instead of hardcoded AWS account IDs in the Kubernetes manifests.
+
+### Setup Environment Variables
+
+## Option 1: Using the helper script (Recommended)
+
+```bash
+source scripts/set-env.sh
+```
+
+## Option 2: Manual setup**
+
+```bash
+export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+```
+
+### Deploy with Environment Variables
+
+```bash
+make deploy-env    # Deploy with environment variable substitution
+```
+
+This approach:
+
+- ✅ Keeps AWS account IDs out of version control
+- ✅ Uses current AWS credentials dynamically
+- ✅ Works in different AWS environments (dev/staging/prod)
+- ✅ Follows security best practices
+
+---
+
 ## Prerequisites
 
 **Required Tools:**
@@ -225,7 +258,7 @@ kubectl exec -n ssp-namespace deployment/ssp -- \
 kubectl get pods --all-namespaces -w
 
 # Monitor stats
-watch -n 5 'curl -s http://$LOAD_BALANCER_URL/stats'
+watch -n 5 make stats
 ```
 
 ---

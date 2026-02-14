@@ -36,66 +36,71 @@ resource "null_resource" "build_and_push_image" {
   }
 }
 
-locals {
-  aws_account_id     = data.aws_caller_identity.current.account_id
-  ecr_repository_url = "${local.aws_account_id}.dkr.ecr.${var.region}.amazonaws.com/${var.repo_name}"
-}
-
-# Update Kubernetes deployment files with correct image URI
-resource "null_resource" "update_deployments" {
-  depends_on = [null_resource.build_and_push_image]
-
-  provisioner "local-exec" {
-    command = <<-EOT
-      cd ..
-      # Update deployment files with correct image URI
-      sed -i '' 's|image:.*cloudx-app.*|image: ${local.ecr_repository_url}:latest|g' k8s/ssp-deployment.yaml
-      sed -i '' 's|image:.*cloudx-app.*|image: ${local.ecr_repository_url}:latest|g' k8s/bidder-deployment.yaml
-      
-      # Also handle placeholder format (escape the $ in sed command)
-      sed -i '' 's|$${AWS_ACCOUNT_ID}\.dkr\.ecr\..*\.amazonaws\.com/.*:latest|${local.ecr_repository_url}:latest|g' k8s/ssp-deployment.yaml
-      sed -i '' 's|$${AWS_ACCOUNT_ID}\.dkr\.ecr\..*\.amazonaws\.com/.*:latest|${local.ecr_repository_url}:latest|g' k8s/bidder-deployment.yaml
-    EOT
-  }
-
-  triggers = {
-    image_built = null_resource.build_and_push_image.id
-  }
-}
-
 # Deploy Kubernetes manifests
 resource "null_resource" "deploy_app" {
   depends_on = [
-    null_resource.update_deployments,
+    null_resource.build_and_push_image,
     aws_eks_node_group.node_group
   ]
 
   provisioner "local-exec" {
     command = <<-EOT
       aws eks update-kubeconfig --region ${var.region} --name ${aws_eks_cluster.eks.name}
+      
+      # Set environment variables for envsubst
+      export AWS_ACCOUNT_ID=${data.aws_caller_identity.current.account_id}
+      export AWS_REGION=${var.region}
+      export REPO_NAME=${var.repo_name}
+      
+      # Apply manifests without environment substitution first
       kubectl apply -f ../k8s/namespaces.yaml
-      kubectl apply -f ../k8s/ssp-deployment.yaml
-      kubectl apply -f ../k8s/bidder-deployment.yaml
       kubectl apply -f ../k8s/ssp-service.yaml
       kubectl apply -f ../k8s/bidder-service.yaml
       kubectl apply -f ../k8s/ssp-network-policy.yaml
       kubectl apply -f ../k8s/bidder-network-policy.yaml
+      
+      # Apply deployments with environment variable substitution
+      envsubst < ../k8s/ssp-deployment.yaml | kubectl apply -f -
+      envsubst < ../k8s/bidder-deployment.yaml | kubectl apply -f -
     EOT
   }
 
   # Add destroy-time cleanup
-  # provisioner "local-exec" {
-  #   when    = destroy
-  #   command = <<-EOT
-  #     kubectl delete networkpolicy --all --all-namespaces --ignore-not-found=true
-  #     kubectl delete service --all --all-namespaces --ignore-not-found=true
-  #     kubectl delete deployment --all --all-namespaces --ignore-not-found=true
-  #     kubectl delete namespace ssp-namespace bidder-app --ignore-not-found=true
-  #   EOT
-  # }
+  provisioner "local-exec" {
+    when    = destroy
+    command = <<-EOT
+      # Set kubeconfig first (using hardcoded region and cluster name from environment)
+      REGION=$(aws configure get region)
+      CLUSTER_NAME=$(aws eks list-clusters --region $REGION --query 'clusters[0]' --output text 2>/dev/null || echo "")
+      
+      if [ ! -z "$CLUSTER_NAME" ]; then
+        aws eks update-kubeconfig --region $REGION --name $CLUSTER_NAME || true
+        
+        # Delete resources in proper order
+        kubectl delete networkpolicy --all --all-namespaces --ignore-not-found=true || true
+        kubectl delete service --all -n ssp-namespace --ignore-not-found=true || true
+        kubectl delete service --all -n bidder-app --ignore-not-found=true || true
+        kubectl delete deployment --all -n ssp-namespace --ignore-not-found=true || true
+        kubectl delete deployment --all -n bidder-app --ignore-not-found=true || true
+        kubectl delete namespace ssp-namespace bidder-app --ignore-not-found=true || true
+        
+        # Wait longer for AWS Load Balancer resources to be cleaned up
+        echo "Waiting for AWS Load Balancers and Security Groups to be cleaned up..."
+        sleep 60
+        
+        # Clean up any remaining ELB security groups
+        VPC_ID=$(aws ec2 describe-vpcs --region $REGION --filters "Name=tag:Name,Values=eks-vpc" --query "Vpcs[0].VpcId" --output text 2>/dev/null || echo "")
+        if [ ! -z "$VPC_ID" ] && [ "$VPC_ID" != "None" ]; then
+          aws ec2 describe-security-groups --region $REGION --filters "Name=vpc-id,Values=$VPC_ID" "Name=group-name,Values=k8s-elb-*" --query "SecurityGroups[].GroupId" --output text 2>/dev/null | tr '\t' '\n' | while read sg_id; do
+            [ ! -z "$sg_id" ] && aws ec2 delete-security-group --region $REGION --group-id "$sg_id" 2>/dev/null || true
+          done
+        fi
+      fi
+    EOT
+  }
 
   triggers = {
-    deployments_updated = null_resource.update_deployments.id
+    # deployments_updated = null_resource.update_deployments.id
   }
 }
 

@@ -23,7 +23,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: bidder
-          image: 921150455604.dkr.ecr.us-east-1.amazonaws.com/cloudx-app-repo:latest
+          image: ${AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/cloudx-app-repo:latest
           imagePullPolicy: Always
           args: ["./server", "bidder", "8092"]
           ports:
