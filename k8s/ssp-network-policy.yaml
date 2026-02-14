@@ -15,41 +15,41 @@ spec:
     matchLabels:
       app: ssp
   policyTypes:
-  - Ingress
-  - Egress
+    - Ingress
+    - Egress
   ingress:
-  # Allow traffic from bidder service
-  - from:
-    - namespaceSelector:
-        matchLabels:
-          name: bidder-app
-      podSelector:
-        matchLabels:
-          app: bidder
-    ports:
-    - protocol: TCP
-      port: 8091
-  # Allow external internet traffic (for public access)
-  - from: []
-    ports:
-    - protocol: TCP
-      port: 80
+    # Allow traffic from bidder service
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: bidder-app
+          podSelector:
+            matchLabels:
+              app: bidder
+      ports:
+        - protocol: TCP
+          port: 8091
+    # Allow external internet traffic (for public access)
+    - from: []
+      ports:
+        - protocol: TCP
+          port: 80
   egress:
-  # Allow traffic to bidder service
-  - to:
-    - namespaceSelector:
-        matchLabels:
-          name: bidder-app
-      podSelector:
-        matchLabels:
-          app: bidder
-    ports:
-    - protocol: TCP
-      port: 8092
-  # Allow DNS resolution
-  - to: []
-    ports:
-    - protocol: TCP
-      port: 53
-    - protocol: UDP
-      port: 53
+    # Allow traffic to bidder service
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: bidder-app
+          podSelector:
+            matchLabels:
+              app: bidder
+      ports:
+        - protocol: TCP
+          port: 8092
+    # Allow DNS resolution
+    - to: []
+      ports:
+        - protocol: TCP
+          port: 53
+        - protocol: UDP
+          port: 53
