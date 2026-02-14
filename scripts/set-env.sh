@@ -2,7 +2,7 @@
 # Script to set up environment variables for Kubernetes deployment
 
 # Get AWS Account ID from current credentials
-export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text 2>/dev/null)
+export AWS_ACCOUNT_ID=${AWS_ACCOUNT_ID:-$(aws sts get-caller-identity --query Account --output text 2>/dev/null)}
 
 if [ -z "$AWS_ACCOUNT_ID" ]; then
     echo "Error: Unable to get AWS Account ID. Please ensure you have AWS credentials configured."
