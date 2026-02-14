@@ -21,7 +21,9 @@ resource "aws_eks_cluster" "eks" {
 }
 
 resource "aws_eks_node_group" "node_group" {
-  depends_on = [aws_eks_cluster.eks,
+  depends_on = [
+    aws_vpc.eks,
+    aws_eks_cluster.eks,
     aws_internet_gateway.eks
   ]
   cluster_name    = aws_eks_cluster.eks.name
@@ -30,9 +32,9 @@ resource "aws_eks_node_group" "node_group" {
   subnet_ids      = aws_subnet.public[*].id
 
   scaling_config {
-    min_size     = 2
-    desired_size = 3
-    max_size     = 4
+    min_size     = 1
+    desired_size = 2
+    max_size     = 3
   }
 
   instance_types = [var.instance_type]
