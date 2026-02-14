@@ -8,34 +8,34 @@ help: ## Show this help message
 
 # Terraform commands
 tf-init: ## Initialize Terraform
-	cd terraform && terraform init
+	terraform -chdir=terraform init 
 
 tf-plan: ## Run Terraform plan
-	cd terraform && terraform plan
+	terraform -chdir=terraform plan
 
 tf-apply: ## Apply Terraform configuration
-	cd terraform && terraform apply
+	terraform -chdir=terraform apply
 
 tf-apply-auto: ## Apply Terraform configuration without confirmation
-	cd terraform && terraform apply -auto-approve
+	terraform -chdir=terraform apply -auto-approve
 
 tf-destroy: ## Destroy Terraform infrastructure
-	cd terraform && terraform destroy
+	terraform -chdir=terraform destroy
 
 tf-destroy-auto: ## Destroy Terraform infrastructure without confirmation
-	cd terraform && terraform destroy -auto-approve
+	terraform -chdir=terraform destroy -auto-approve
 
 tf-validate: ## Validate Terraform configuration
-	cd terraform && terraform validate
+	terraform -chdir=terraform validate
 
 tf-fmt: ## Format Terraform files
-	cd terraform && terraform fmt -recursive
+	terraform -chdir=terraform fmt -recursive
 
 tf-output: ## Show Terraform outputs
-	cd terraform && terraform output
+	terraform -chdir=terraform output
 
 tf-refresh: ## Refresh Terraform state
-	cd terraform && terraform refresh
+	terraform -chdir=terraform refresh
 
 # Build commands
 build: ## Build the Go application
@@ -48,8 +48,8 @@ clean: ## Clean build artifacts
 	rm -f bin/server
 
 # Docker commands
-docker-build: ## Build Docker image
-	docker build -t cloudx-app-repo -f app/Dockerfile .
+# docker-build: ## Build Docker image
+# 	docker build -t cloudx-app-repo -f app/Dockerfile .
 
 shell: ## Drop into a shell in the Docker image
 	docker run -it --rm cloudx-app /bin/sh
@@ -94,6 +94,26 @@ events-bidder: ## View events in Bidder namespace
 
 events-all: ## View events in all namespaces
 	kubectl get events --all-namespaces --sort-by='.lastTimestamp'
+
+# Kubernetes deployment with environment variables
+deploy-env: ## Deploy with environment variable substitution (requires AWS_ACCOUNT_ID to be set)
+	@if [ -z "$(AWS_ACCOUNT_ID)" ]; then \
+		echo "Error: AWS_ACCOUNT_ID environment variable is not set"; \
+		echo "Please set it with: export AWS_ACCOUNT_ID=\$$(aws sts get-caller-identity --query Account --output text)"; \
+		exit 1; \
+	fi
+	@echo "Deploying with AWS_ACCOUNT_ID=$(AWS_ACCOUNT_ID)"
+	kubectl apply -f k8s/namespaces.yaml
+	kubectl apply -f k8s/ssp-service.yaml
+	kubectl apply -f k8s/bidder-service.yaml
+	kubectl apply -f k8s/ssp-network-policy.yaml
+	kubectl apply -f k8s/bidder-network-policy.yaml
+	envsubst < k8s/ssp-deployment.yaml | kubectl apply -f -
+	envsubst < k8s/bidder-deployment.yaml | kubectl apply -f -
+
+set-aws-account: ## Set AWS_ACCOUNT_ID environment variable from current AWS credentials
+	@echo "export AWS_ACCOUNT_ID=\$$(aws sts get-caller-identity --query Account --output text)"
+	@echo "Run the above command to set the AWS_ACCOUNT_ID environment variable"
 
 # Local development
 run-bidder: build ## Run bidder locally on port 8092

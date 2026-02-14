@@ -53,7 +53,8 @@ resource "aws_subnet" "private" {
 
 # NAT Gateway
 resource "aws_eip" "nat" {
-  domain = "vpc"
+  domain     = "vpc"
+  depends_on = [aws_internet_gateway.eks]
 
   tags = {
     Name = "nat-eip"
@@ -63,6 +64,7 @@ resource "aws_eip" "nat" {
 resource "aws_nat_gateway" "nat" {
   allocation_id = aws_eip.nat.id
   subnet_id     = aws_subnet.public[0].id
+  depends_on    = [aws_internet_gateway.eks, aws_route_table_association.public]
 
   tags = {
     Name = "eks-nat-gateway"
