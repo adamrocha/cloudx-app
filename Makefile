@@ -1,10 +1,10 @@
-.PHONY: help tf-init tf-plan tf-apply tf-destroy tf-validate tf-fmt tf-output clean build test
+.PHONY: help tf-init tf-plan tf-apply tf-destroy tf-validate tf-fmt tf-output clean build test deploy-env destroy-env
 
 help: ## Show this help message
 	@echo 'Usage: make [target]'
 	@echo ''
 	@echo 'Available targets:'
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}'
+	@grep -E '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
 # Terraform commands
 tf-init: ## Initialize Terraform
@@ -19,11 +19,8 @@ tf-apply: ## Apply Terraform configuration
 tf-apply-auto: ## Apply Terraform configuration without confirmation
 	terraform -chdir=terraform apply -auto-approve
 
-tf-destroy: ## Destroy Terraform infrastructure
+tf-destroy: destroy-env ## Destroy Terraform infrastructure
 	terraform -chdir=terraform destroy
-
-tf-destroy-auto: ## Destroy Terraform infrastructure without confirmation
-	terraform -chdir=terraform destroy -auto-approve
 
 tf-validate: ## Validate Terraform configuration
 	terraform -chdir=terraform validate
@@ -96,24 +93,33 @@ events-all: ## View events in all namespaces
 	kubectl get events --all-namespaces --sort-by='.lastTimestamp'
 
 # Kubernetes deployment with environment variables
-deploy-env: ## Deploy with environment variable substitution (requires AWS_ACCOUNT_ID to be set)
-	@if [ -z "$(AWS_ACCOUNT_ID)" ]; then \
-		echo "Error: AWS_ACCOUNT_ID environment variable is not set"; \
-		echo "Please set it with: export AWS_ACCOUNT_ID=\$$(aws sts get-caller-identity --query Account --output text)"; \
-		exit 1; \
-	fi
-	@echo "Deploying with AWS_ACCOUNT_ID=$(AWS_ACCOUNT_ID)"
-	kubectl apply -f k8s/namespaces.yaml
-	kubectl apply -f k8s/ssp-service.yaml
-	kubectl apply -f k8s/bidder-service.yaml
-	kubectl apply -f k8s/ssp-network-policy.yaml
-	kubectl apply -f k8s/bidder-network-policy.yaml
-	envsubst < k8s/ssp-deployment.yaml | kubectl apply -f -
-	envsubst < k8s/bidder-deployment.yaml | kubectl apply -f -
-
 set-aws-account: ## Set AWS_ACCOUNT_ID environment variable from current AWS credentials
 	@echo "export AWS_ACCOUNT_ID=\$$(aws sts get-caller-identity --query Account --output text)"
 	@echo "Run the above command to set the AWS_ACCOUNT_ID environment variable"
+
+deploy-env: ## Deploy using Kustomize (auto-detects AWS Account ID)
+	@AWS_ACCOUNT_ID=$${AWS_ACCOUNT_ID:-$$(aws sts get-caller-identity --query Account --output text)} && \
+	echo "Deploying with AWS_ACCOUNT_ID=$$AWS_ACCOUNT_ID" && \
+	cd k8s && \
+	kustomize edit set image cloudx-app-repo=$$AWS_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/cloudx-app-repo:latest && \
+	kubectl apply -k .
+
+destroy-env: ## Delete all Kubernetes resources using Kustomize
+	@echo "⚠️  WARNING: This will delete all Kubernetes resources!"
+	@echo "This includes: Deployments, Services, Network Policies, and Namespaces."
+	@echo "The LoadBalancer will also be deleted (may take a few minutes)."
+	@echo ""
+	@read -p "Are you sure you want to continue? [yes/N]: " confirm && \
+	if [ "$$confirm" = "yes" ]; then \
+		echo "Deleting Kubernetes resources..."; \
+		kubectl delete -k k8s/ --ignore-not-found=true --timeout=5m || true; \
+		echo "Waiting for LoadBalancer cleanup..."; \
+		sleep 10; \
+		echo "Kubernetes resources deleted"; \
+	else \
+		echo "Deletion cancelled."; \
+		exit 1; \
+	fi
 
 # Local development
 run-bidder: build ## Run bidder locally on port 8092
