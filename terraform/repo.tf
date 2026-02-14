@@ -30,8 +30,8 @@ resource "terraform_data" "docker_buildx" {
   depends_on = [aws_ecr_repository.repo]
 
   triggers_replace = {
-    image_tag  = var.image_tag
-    platforms  = join(",", var.platforms)
+    image_tag = var.image_tag
+    platforms = join(",", var.platforms)
     # Rebuild image when source code changes
     dockerfile_hash = filemd5("../app/Dockerfile")
     main_go_hash    = filemd5("../app/main.go")
